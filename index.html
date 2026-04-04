@@ -102,7 +102,8 @@
     box-shadow: 0 0 8px #6ebd8a88;
     animation: pulse 2s ease-in-out infinite;
   }
-  .status-dot.err { background: var(--danger); }
+  .status-dot.err  { background: var(--danger); }
+  .status-dot.warn { background: var(--accent); box-shadow: 0 0 8px var(--accent)88; }
   @keyframes pulse {
     0%,100% { box-shadow: 0 0 4px #6ebd8a66; }
     50%      { box-shadow: 0 0 12px #6ebd8aaa; }
@@ -648,7 +649,6 @@ async function _send(address, args) {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     addLog(ts, address, args.map(a => a.value).join(' '), false);
-    setStatus('online');
   } catch (e) {
     addLog(ts, address, 'ERROR: ' + e.message, true);
     setStatus('error');
@@ -666,13 +666,14 @@ function setStatus(s) {
 async function ping() {
   const port = document.getElementById('bridgePort').value;
   try {
-    await fetch(`http://localhost:${port}/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: '/ping', args: [{ type: 'i', value: 1 }] })
-    });
-    setStatus('online');
-  } catch { setStatus('offline'); }
+    const res  = await fetch(`http://localhost:${port}/status`);
+    const data = await res.json();
+    document.getElementById('scHostLabel').textContent =
+      data.scHost + ':' + data.scPort;
+    setStatus(data.scAlive ? 'online' : 'bridge-only');
+  } catch {
+    setStatus('offline');
+  }
 }
 
 // ── Log ──────────────────────────────────────────────────────────
