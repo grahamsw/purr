@@ -9,7 +9,7 @@ Formant bank design:
   F3, F4 = BPF on noise (sustained upper resonance, breath texture)
 
 Sonification mapping layer -- /purr/pitch, /purr/intensity, /purr/arousal:
-  pitch     -> baseFreq + purrRate
+  pitch     -> baseFreq (20-800 Hz exp) + purrRate (15-80 Hz)
   intensity -> amp + formant amps
   arousal   -> jitterDepth + breathRate + reverbMix + decays
 
@@ -18,7 +18,7 @@ Web UI sends to 192.168.1.43:57120
   /purr/pitch     value(f)  0-1
   /purr/intensity value(f)  0-1
   /purr/arousal   value(f)  0-1
-  /purr/gate      1|0(i)
+  /purr/gate      1|0(i)             -- starts synth on 1, stops on 0
 */
 
 s = Server.default;
@@ -42,52 +42,52 @@ s.waitForBoot {
             amp  = 0.4,
             gate = 1,
 
-            // ââ Pitch centre âââââââââââââââââââââââââââââââââââââ
+            // -- Pitch centre --------------------------------------
             // All formant freqs = baseFreq * their ratio.
             // This is the primary pitch control for sonification.
-            baseFreq = 40,          // Hz â shift this to move the whole voice
+            baseFreq = 40,          // Hz
 
-            // ââ Purr rhythm ââââââââââââââââââââââââââââââââââââââ
+            // -- Purr rhythm --------------------------------------
             purrRate    = 28,       // glottal pulse rate Hz
             jitterRate  = 4,        // jitter wander speed Hz
-            jitterDepth = 0.08,     // fractional jitter depth (0â0.4)
+            jitterDepth = 0.08,     // fractional jitter depth (0-0.4)
             impulseLPF  = 2.0,      // LPF on impulse as ratio of baseFreq
 
-            // ââ F1 â chest fundamental (Ringz) âââââââââââââââââââ
-            f1Ratio  = 1.0,         // baseFreq * 1.0
+            // -- F1 - chest fundamental (Ringz) -------------------
+            f1Ratio  = 1.0,
             f1Amp    = 0.5,
             f1Decay  = 0.05,        // s
 
-            // ââ F2 â throat/first overtone (Ringz) âââââââââââââââ
+            // -- F2 - throat/first overtone (Ringz) ---------------
             f2Ratio  = 2.1,         // slightly stretched octave
             f2Amp    = 0.35,
             f2Decay  = 0.03,
 
-            // ââ F3 â upper chest (BPF on noise) ââââââââââââââââââ
+            // -- F3 - upper chest (BPF on noise) ------------------
             f3Ratio  = 4.5,
             f3Amp    = 0.07,
             f3RQ     = 0.45,
 
-            // ââ F4 â nasal texture (BPF on noise) ââââââââââââââââ
+            // -- F4 - nasal texture (BPF on noise) ----------------
             f4Ratio  = 9.0,
             f4Amp    = 0.03,
             f4RQ     = 0.35,
 
-            // ââ Rumble (low pulse + LPF) âââââââââââââââââââââââââ
+            // -- Rumble (low pulse + LPF) -------------------------
             rumbleAmp       = 0.25,
             rumbleCutoff    = 1.8,  // ratio of baseFreq
             rumbleWidthRate = 2,
 
-            // ââ Breath modulation ââââââââââââââââââââââââââââââââ
+            // -- Breath modulation --------------------------------
             breathRate  = 0.35,
             breathDepth = 0.3,
 
-            // ââ Reverb âââââââââââââââââââââââââââââââââââââââââââ
+            // -- Reverb -------------------------------------------
             reverbMix  = 0.4,
             reverbRoom = 0.5,
             reverbDamp = 0.8,
 
-            // ââ Envelope âââââââââââââââââââââââââââââââââââââââââ
+            // -- Envelope -----------------------------------------
             atk = 0.3,
             rel = 0.4;
 
@@ -100,7 +100,7 @@ s.waitForBoot {
         breathLo  = 1.0 - breathDepth;
         breathMod = SinOsc.kr(breathRate).range(breathLo, 1.0);
 
-        // Shared impulse source â LPF cutoff tracks baseFreq
+        // Shared impulse source - LPF cutoff tracks baseFreq
         impulses = LPF.ar(Impulse.ar(rate), baseFreq * impulseLPF);
 
         // F1 + F2: transient Ringz driven by impulses
@@ -128,22 +128,22 @@ s.waitForBoot {
 
     s.sync;
 
-    ~purr = Synth(\catPurr);
-    "catPurr synth started.".postln;
+    // Synth starts nil -- waits for /purr/gate 1
+    ~purr = nil;
 
-    // /purr/set  paramName(s)  value(f)
+    // -- Low-level: /purr/set  paramName  value -------------------
     ~purrOSC = OSCFunc({ |msg|
         var param = msg[1].asString;
         var value = msg[2].asFloat;
         ("OSC /purr/set  " ++ param ++ "  " ++ value).postln;
-        ~purr.set(param.asSymbol, value);
+        ~purr.notNil.if { ~purr.set(param.asSymbol, value) };
     }, '/purr/set');
 
-    // /purr/gate  1|0
+    // -- Low-level: /purr/gate  1|0 -------------------------------
     ~purrGate = OSCFunc({ |msg|
         var gateVal = msg[1].asInteger;
         if (gateVal == 0) {
-            ~purr.set(\gate, 0);
+            ~purr.notNil.if { ~purr.set(\gate, 0) };
             "catPurr stopped.".postln;
         } {
             ~purr = Synth(\catPurr);
@@ -151,30 +151,33 @@ s.waitForBoot {
         };
     }, '/purr/gate');
 
-    // -- High-level mapping state --
+    // -- High-level mapping state ---------------------------------
     ~mapPitch     = 0.5;
     ~mapIntensity = 0.5;
     ~mapArousal   = 0.5;
 
     ~applyMapping = {
         var p = ~mapPitch, i = ~mapIntensity, a = ~mapArousal;
-        ~purr.set(
-            \baseFreq,    20 * (40 ** p),          // exp: 20-800 Hz
-            \purrRate,    15   + (p * 65),           // 15-80 Hz
-            \amp,         0.15 + (i * 0.55),
-            \f1Amp,       0.30 + (i * 0.35),
-            \f2Amp,       0.20 + (i * 0.25),
-            \rumbleAmp,   0.08 + (i * 0.30),
-            \jitterDepth, 0.02 + (a * 0.20),
-            \breathRate,  0.15 + (a * 1.20),
-            \breathDepth, 0.10 + (a * 0.35),
-            \reverbMix,   0.55 - (a * 0.40),
-            \f1Decay,     0.08 - (a * 0.05),
-            \f2Decay,     0.05 - (a * 0.03)
-        );
-        ("Mapping  pitch=" ++ p ++ "  intensity=" ++ i ++ "  arousal=" ++ a).postln;
+        ~purr.notNil.if {
+            ~purr.set(
+                \baseFreq,    20 * (40 ** p),      // exp: 20-800 Hz
+                \purrRate,    15 + (p * 65),        // 15-80 Hz
+                \amp,         0.15 + (i * 0.55),
+                \f1Amp,       0.30 + (i * 0.35),
+                \f2Amp,       0.20 + (i * 0.25),
+                \rumbleAmp,   0.08 + (i * 0.30),
+                \jitterDepth, 0.02 + (a * 0.20),
+                \breathRate,  0.15 + (a * 1.20),
+                \breathDepth, 0.10 + (a * 0.35),
+                \reverbMix,   0.55 - (a * 0.40),
+                \f1Decay,     0.08 - (a * 0.05),
+                \f2Decay,     0.05 - (a * 0.03)
+            );
+            ("Mapping  pitch=" ++ p ++ "  intensity=" ++ i ++ "  arousal=" ++ a).postln;
+        };
     };
 
+    // -- High-level: /purr/pitch  /purr/intensity  /purr/arousal --
     OSCFunc({ |msg| ~mapPitch     = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/pitch');
     OSCFunc({ |msg| ~mapIntensity = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/intensity');
     OSCFunc({ |msg| ~mapArousal   = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/arousal');
@@ -183,4 +186,3 @@ s.waitForBoot {
 };
 
 ServerQuit.add({ 0.exit });
-
