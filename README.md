@@ -213,8 +213,8 @@ Pitch shifts the spectral centre of the entire instrument.
 
 | Synth parameter | Formula | Range |
 |---|---|---|
-| `baseFreq` | `20 + p * 60` | 20–80 Hz |
-| `purrRate` | `18 + p * 20` | 18–38 Hz |
+| `baseFreq` | `20 * (40 ** p)` | 20–800 Hz (exponential) |
+| `purrRate` | `15 + p * 65` | 15–80 Hz |
 
 `baseFreq` is the anchor that all formant frequencies multiply from. Because F1–F4 are all `baseFreq * ratio`, moving it shifts the complete harmonic structure without changing its internal shape. `purrRate` moves with pitch because larger, heavier animals purr more slowly; scaling them together keeps the result biologically coherent.
 

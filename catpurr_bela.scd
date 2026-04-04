@@ -1,5 +1,5 @@
 /*******************
-Cat Purr Synthesizer â Bela Gem / PocketBeagle 2
+Cat Purr Synthesizer - Bela Gem / PocketBeagle 2
 OSC-controllable via WiFi
 
 Formant bank design:
@@ -159,8 +159,8 @@ s.waitForBoot {
     ~applyMapping = {
         var p = ~mapPitch, i = ~mapIntensity, a = ~mapArousal;
         ~purr.set(
-            \baseFreq,    20   + (p * 60),
-            \purrRate,    18   + (p * 20),
+            \baseFreq,    20 * (40 ** p),          // exp: 20-800 Hz
+            \purrRate,    15   + (p * 65),           // 15-80 Hz
             \amp,         0.15 + (i * 0.55),
             \f1Amp,       0.30 + (i * 0.35),
             \f2Amp,       0.20 + (i * 0.25),
