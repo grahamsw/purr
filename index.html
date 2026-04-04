@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cat Purr — OSC Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital@1&display=swap" rel="stylesheet">
+
+<style>
+  /* ── Reset & base ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0e10;
+    --surface:   #13151a;
+    --surface2:  #1c1f27;
+    --border:    #2a2e3a;
+    --accent:    #c8a96e;   /* warm amber */
+    --accent2:   #7eb8c9;  /* cool slate blue */
+    --danger:    #c96e6e;
+    --text:      #d4cfc7;
+    --text-dim:  #6b6860;
+    --text-mute: #3a3830;
+    --radius:    6px;
+    --track-h:   3px;
+    --thumb-sz:  16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grain overlay ───────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999; opacity: 0.5;
+  }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .shell {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 32px;
+    gap: 16px;
+  }
+
+  .title-block h1 {
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .title-block p {
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ── Status / transport ──────────────────────────────── */
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-mute);
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+  .status-dot.alive {
+    background: #6ebd8a;
+    box-shadow: 0 0 8px #6ebd8a88;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .status-dot.err { background: var(--danger); }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 4px #6ebd8a66; }
+    50%      { box-shadow: 0 0 12px #6ebd8aaa; }
+  }
+
+  .status-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    min-width: 64px;
+  }
+
+  button.gate-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  button.gate-btn:hover { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+  button.gate-btn.on  { border-color: var(--danger); color: var(--danger); }
+  button.gate-btn.on:hover { background: #2a1515; }
+
+  /* ── Bridge config bar ───────────────────────────────── */
+  .config-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 32px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .config-bar label { text-transform: uppercase; letter-spacing: 0.07em; flex-shrink: 0; }
+  .config-bar input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 4px 8px;
+    width: 80px;
+  }
+  .config-bar input:focus { outline: none; border-color: var(--accent); }
+  .config-sep { color: var(--text-mute); }
+
+  /* ── Sections ────────────────────────────────────────── */
+  .section {
+    margin-bottom: 28px;
+  }
+
+  .section-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 18px;
+  }
+
+  .section-label span {
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px 20px;
+  }
+
+  /* ── Parameter row ───────────────────────────────────── */
+  .param {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .param-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .param-name {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+  }
+
+  .param-value {
+    font-size: 11px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: right;
+  }
+
+  .param-hint {
+    font-size: 9px;
+    color: var(--text-mute);
+    text-align: right;
+  }
+
+  /* ── Slider ──────────────────────────────────────────── */
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: var(--track-h);
+    background: var(--surface2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: var(--thumb-sz); height: var(--thumb-sz);
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--accent);
+    transition: box-shadow 0.15s, transform 0.1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px #c8a96e44;
+    transform: scale(1.15);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: var(--thumb-sz); height: var(--thumb-sz);
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--accent);
+    cursor: pointer;
+  }
+
+  /* Filled track overlay via custom property */
+  input[type=range] {
+    --pct: 0%;
+    background: linear-gradient(
+      to right,
+      var(--accent) 0%,
+      var(--accent) var(--pct),
+      var(--surface2) var(--pct),
+      var(--surface2) 100%
+    );
+  }
+
+  /* blue-tinted sliders for the noise section */
+  .noise-group input[type=range] {
+    --pct: 0%;
+    background: linear-gradient(
+      to right,
+      var(--accent2) 0%,
+      var(--accent2) var(--pct),
+      var(--surface2) var(--pct),
+      var(--surface2) 100%
+    );
+  }
+  .noise-group input[type=range]::-webkit-slider-thumb { background: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
+  .noise-group input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 3px #7eb8c944; }
+
+  /* ── Flash on send ───────────────────────────────────── */
+  @keyframes flashSend {
+    0%   { border-color: var(--accent); }
+    100% { border-color: var(--border); }
+  }
+  .param.sending input[type=range]::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px #c8a96e77;
+  }
+
+  /* ── Activity log ────────────────────────────────────── */
+  .log-wrap {
+    margin-top: 36px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .log-header span {
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  button.clear-btn {
+    background: none;
+    border: none;
+    color: var(--text-mute);
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  button.clear-btn:hover { color: var(--text-dim); }
+
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    height: 120px;
+    overflow-y: auto;
+    font-size: 10px;
+    color: var(--text-mute);
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+  }
+  .log-entry { color: var(--text-dim); }
+  .log-entry .ts { color: var(--text-mute); margin-right: 8px; }
+  .log-entry .addr { color: var(--accent); }
+  .log-entry.err .addr { color: var(--danger); }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="title-block">
+      <h1>Cat Purr</h1>
+      <p>SuperCollider OSC Controller</p>
+    </div>
+    <div class="transport">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label" id="statusLabel">offline</span>
+      <button class="gate-btn" onclick="syncAll()">⇅ sync</button>
+      <button class="gate-btn" id="gateBtn" onclick="toggleGate()">▶ start</button>
+    </div>
+  </header>
+
+  <!-- ── Bridge config ── -->
+  <div class="config-bar">
+    <label>bridge</label>
+    <span>http://localhost:</span>
+    <input type="number" id="bridgePort" value="3131" min="1024" max="65535" onchange="ping()">
+    <span class="config-sep">│</span>
+    <label>SC port</label>
+    <span id="scPortLabel">57120</span>
+  </div>
+
+  <!-- ── Parameters ── -->
+  <div id="params"></div>
+
+  <!-- ── Log ── -->
+  <div class="log-wrap">
+    <div class="log-header">
+      <span>▸ OSC log</span>
+      <button class="clear-btn" onclick="clearLog()">clear</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+</div>
+
+<script>
+// ── Parameter definitions ────────────────────────────────────────
+const PARAMS = [
+  {
+    section: 'Master',
+    icon: '◈',
+    params: [
+      { name: 'amp',      label: 'amp',      min: 0,   max: 1,   step: 0.01, def: 0.4,  fmt: v => v.toFixed(2) },
+      { name: 'baseFreq', label: 'baseFreq', min: 20,  max: 200, step: 1,    def: 40,   fmt: v => v.toFixed(0) + ' Hz' },
+    ]
+  },
+  {
+    section: 'Rhythm',
+    icon: '◎',
+    params: [
+      { name: 'purrRate',    label: 'purrRate',    min: 15,  max: 60,  step: 0.5,  def: 28,   fmt: v => v.toFixed(1) + ' Hz' },
+      { name: 'jitterRate',  label: 'jitterRate',  min: 0.5, max: 20,  step: 0.5,  def: 4,    fmt: v => v.toFixed(1) + ' Hz' },
+      { name: 'jitterDepth', label: 'jitterDepth', min: 0,   max: 0.4, step: 0.01, def: 0.08, fmt: v => v.toFixed(2) },
+      { name: 'impulseLPF',  label: 'impulseLPF',  min: 0.5, max: 8,   step: 0.1,  def: 2.0,  fmt: v => v.toFixed(1) + '× base' },
+    ]
+  },
+  {
+    section: 'F1 — chest fundamental (Ringz)',
+    icon: '◇',
+    params: [
+      { name: 'f1Ratio', label: 'f1Ratio', min: 0.5, max: 3,    step: 0.05, def: 1.0,  fmt: v => v.toFixed(2) + '×' },
+      { name: 'f1Amp',   label: 'f1Amp',   min: 0,   max: 1,    step: 0.01, def: 0.5,  fmt: v => v.toFixed(2) },
+      { name: 'f1Decay', label: 'f1Decay', min: 0.004,max: 0.15,step: 0.001,def: 0.05, fmt: v => (v * 1000).toFixed(0) + ' ms' },
+    ]
+  },
+  {
+    section: 'F2 — throat (Ringz)',
+    icon: '◇',
+    params: [
+      { name: 'f2Ratio', label: 'f2Ratio', min: 0.5, max: 6,    step: 0.05, def: 2.1,  fmt: v => v.toFixed(2) + '×' },
+      { name: 'f2Amp',   label: 'f2Amp',   min: 0,   max: 1,    step: 0.01, def: 0.35, fmt: v => v.toFixed(2) },
+      { name: 'f2Decay', label: 'f2Decay', min: 0.004,max: 0.15,step: 0.001,def: 0.03, fmt: v => (v * 1000).toFixed(0) + ' ms' },
+    ]
+  },
+  {
+    section: 'F3 — upper chest (BPF noise)',
+    icon: '≋',
+    cls: 'noise-group',
+    params: [
+      { name: 'f3Ratio', label: 'f3Ratio', min: 1,   max: 12,  step: 0.1,  def: 4.5,  fmt: v => v.toFixed(1) + '×' },
+      { name: 'f3Amp',   label: 'f3Amp',   min: 0,   max: 1,   step: 0.01, def: 0.2,  fmt: v => v.toFixed(2) },
+      { name: 'f3RQ',    label: 'f3RQ',    min: 0.05,max: 2,   step: 0.05, def: 0.8,  fmt: v => v.toFixed(2) },
+    ]
+  },
+  {
+    section: 'F4 — nasal texture (BPF noise)',
+    icon: '≋',
+    cls: 'noise-group',
+    params: [
+      { name: 'f4Ratio', label: 'f4Ratio', min: 1,   max: 20,  step: 0.1,  def: 9.0,  fmt: v => v.toFixed(1) + '×' },
+      { name: 'f4Amp',   label: 'f4Amp',   min: 0,   max: 1,   step: 0.01, def: 0.1,  fmt: v => v.toFixed(2) },
+      { name: 'f4RQ',    label: 'f4RQ',    min: 0.05,max: 2,   step: 0.05, def: 0.6,  fmt: v => v.toFixed(2) },
+    ]
+  },
+  {
+    section: 'Rumble',
+    icon: '▾',
+    params: [
+      { name: 'rumbleAmp',       label: 'rumbleAmp',       min: 0,   max: 1,  step: 0.01, def: 0.25, fmt: v => v.toFixed(2) },
+      { name: 'rumbleCutoff',    label: 'rumbleCutoff',    min: 0.5, max: 5,  step: 0.1,  def: 1.8,  fmt: v => v.toFixed(1) + '× base' },
+      { name: 'rumbleWidthRate', label: 'rumbleWidthRate', min: 0.1, max: 20, step: 0.1,  def: 2,    fmt: v => v.toFixed(1) + ' Hz' },
+    ]
+  },
+  {
+    section: 'Breath',
+    icon: '〜',
+    params: [
+      { name: 'breathRate',  label: 'breathRate',  min: 0.1, max: 2.0, step: 0.05, def: 0.35, fmt: v => v.toFixed(2) + ' Hz' },
+      { name: 'breathDepth', label: 'breathDepth', min: 0,   max: 1.0, step: 0.01, def: 0.3,  fmt: v => v.toFixed(2) },
+    ]
+  },
+  {
+    section: 'Reverb',
+    icon: '⌁',
+    params: [
+      { name: 'reverbMix',  label: 'reverbMix',  min: 0, max: 1, step: 0.01, def: 0.4, fmt: v => v.toFixed(2) },
+      { name: 'reverbRoom', label: 'reverbRoom', min: 0, max: 1, step: 0.01, def: 0.5, fmt: v => v.toFixed(2) },
+      { name: 'reverbDamp', label: 'reverbDamp', min: 0, max: 1, step: 0.01, def: 0.8, fmt: v => v.toFixed(2) },
+    ]
+  },
+  {
+    section: 'Envelope',
+    icon: '△',
+    params: [
+      { name: 'atk', label: 'atk', min: 0.01, max: 3, step: 0.01, def: 0.3, fmt: v => v.toFixed(2) + ' s' },
+      { name: 'rel', label: 'rel', min: 0.01, max: 3, step: 0.01, def: 0.4, fmt: v => v.toFixed(2) + ' s' },
+    ]
+  },
+];
+
+// ── Build UI ─────────────────────────────────────────────────────
+const container = document.getElementById('params');
+
+PARAMS.forEach(group => {
+  const sec = document.createElement('div');
+  sec.className = 'section' + (group.cls ? ' ' + group.cls : '');
+
+  sec.innerHTML = `<div class="section-label"><span>${group.icon}</span>${group.section}</div>`;
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+
+  group.params.forEach(p => {
+    const pct = ((p.def - p.min) / (p.max - p.min) * 100).toFixed(1);
+    const div = document.createElement('div');
+    div.className = 'param';
+    div.id = 'param-' + p.name;
+    div.innerHTML = `
+      <div class="param-header">
+        <span class="param-name">${p.label}</span>
+        <span class="param-value" id="val-${p.name}">${p.fmt(p.def)}</span>
+      </div>
+      <input type="range"
+        id="sl-${p.name}"
+        min="${p.min}" max="${p.max}" step="${p.step}" value="${p.def}"
+        style="--pct:${pct}%"
+        oninput="onSlider('${p.name}', this, event); sendParam('${p.name}', parseFloat(this.value))"
+      >
+      <span class="param-hint">${p.min} — ${p.max}</span>
+    `;
+    grid.appendChild(div);
+  });
+
+  sec.appendChild(grid);
+  container.appendChild(sec);
+});
+
+// ── Slider input handler ─────────────────────────────────────────
+function onSlider(name, el, e) {
+  const p = findParam(name);
+  const v = parseFloat(el.value);
+  document.getElementById('val-' + name).textContent = p.fmt(v);
+  const pct = ((v - p.min) / (p.max - p.min) * 100).toFixed(1);
+  el.style.setProperty('--pct', pct + '%');
+}
+
+function findParam(name) {
+  for (const g of PARAMS) for (const p of g.params) if (p.name === name) return p;
+}
+
+// ── OSC send ─────────────────────────────────────────────────────
+let purrRunning = false;
+const DEBOUNCE = {};
+
+async function sendParam(name, value) {
+  clearTimeout(DEBOUNCE[name]);
+  DEBOUNCE[name] = setTimeout(() => _send('/purr/set', [
+    { type: 's', value: name },
+    { type: 'f', value: value }
+  ]), 20);
+}
+
+async function syncAll() {
+  for (const g of PARAMS) {
+    for (const p of g.params) {
+      const el = document.getElementById('sl-' + p.name);
+      if (el) await sendParam(p.name, parseFloat(el.value));
+    }
+  }
+  addLog(new Date().toISOString().slice(11,23), '/purr/set', '— all params synced —', false);
+}
+
+async function toggleGate() {
+  purrRunning = !purrRunning;
+  const btn = document.getElementById('gateBtn');
+  btn.textContent = purrRunning ? '■ stop' : '▶ start';
+  btn.className = 'gate-btn' + (purrRunning ? ' on' : '');
+  await _send('/purr/gate', [{ type: 'i', value: purrRunning ? 1 : 0 }]);
+}
+
+async function _send(address, args) {
+  const port = document.getElementById('bridgePort').value;
+  const url  = `http://localhost:${port}/send`;
+  const ts   = new Date().toISOString().slice(11, 23);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, args })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    addLog(ts, address, args.map(a => a.value).join(' '), false);
+    setStatus('online');
+  } catch (e) {
+    addLog(ts, address, 'ERROR: ' + e.message, true);
+    setStatus('error');
+  }
+}
+
+// ── Status ───────────────────────────────────────────────────────
+function setStatus(s) {
+  const dot   = document.getElementById('statusDot');
+  const label = document.getElementById('statusLabel');
+  dot.className   = 'status-dot ' + (s === 'online' ? 'alive' : s === 'error' ? 'err' : '');
+  label.textContent = s;
+}
+
+async function ping() {
+  const port = document.getElementById('bridgePort').value;
+  try {
+    await fetch(`http://localhost:${port}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: '/ping', args: [{ type: 'i', value: 1 }] })
+    });
+    setStatus('online');
+  } catch { setStatus('offline'); }
+}
+
+// ── Log ──────────────────────────────────────────────────────────
+function addLog(ts, addr, val, isErr) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = 'log-entry' + (isErr ? ' err' : '');
+  div.innerHTML = `<span class="ts">${ts}</span><span class="addr">${addr}</span>  ${val}`;
+  log.prepend(div);
+  while (log.children.length > 60) log.removeChild(log.lastChild);
+}
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── Init ─────────────────────────────────────────────────────────
+ping();
+setInterval(ping, 5000);
+</script>
+</body>
+</html>
