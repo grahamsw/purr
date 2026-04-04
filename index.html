@@ -22,6 +22,7 @@
     --text:      #d4cfc7;
     --text-dim:  #6b6860;
     --text-mute: #3a3830;
+    --accent3:   #8ec49e;   /* sage green — mapping layer */
     --radius:    6px;
     --track-h:   3px;
     --thumb-sz:  16px;
@@ -278,6 +279,35 @@
   }
   .noise-group input[type=range]::-webkit-slider-thumb { background: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
   .noise-group input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 3px #7eb8c944; }
+  /* ── Mapping section ─────────────────────────────────── */
+  .mapping-section {
+    background: var(--surface);
+    border: 1px solid #8ec49e33;
+    border-radius: var(--radius);
+    padding: 20px 20px 16px;
+    margin-bottom: 32px;
+  }
+  .mapping-section .section-label { border-bottom-color: #8ec49e33; }
+  .mapping-section .section-label span { color: var(--accent3); }
+  .mapping-section .param-name { font-size: 11px; color: var(--text); letter-spacing: 0.04em; }
+  .mapping-section .param-value { color: var(--accent3); font-size: 12px; }
+  .mapping-section .param-hint { color: var(--text-mute); }
+  .mapping-section input[type=range] {
+    height: 4px;
+    background: linear-gradient(
+      to right,
+      var(--accent3) 0%,
+      var(--accent3) var(--pct),
+      var(--surface2) var(--pct),
+      var(--surface2) 100%
+    );
+  }
+  .mapping-section input[type=range]::-webkit-slider-thumb {
+    background: var(--accent3);
+    box-shadow: 0 0 0 1px var(--accent3);
+    width: 18px; height: 18px;
+  }
+  .mapping-section input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 3px #8ec49e44; }
 
   /* ── Flash on send ───────────────────────────────────── */
   @keyframes flashSend {
@@ -368,6 +398,12 @@
     <span id="scPortLabel">57120</span>
   </div>
 
+  <!-- ── Mapping ── -->
+  <div class="mapping-section" id="mappingSection">
+    <div class="section-label"><span>◈</span>Sonification</div>
+    <div class="grid" id="mappingGrid"></div>
+  </div>
+
   <!-- ── Parameters ── -->
   <div id="params"></div>
 
@@ -383,6 +419,46 @@
 </div>
 
 <script>
+// ── Mapping layer ────────────────────────────────────────────────
+const MAPPING = [
+  { name: 'pitch',     label: 'pitch',     def: 0.5, hint: 'baseFreq 20–80 Hz · purrRate 18–38 Hz' },
+  { name: 'intensity', label: 'intensity', def: 0.5, hint: 'amp · formant levels · rumble' },
+  { name: 'arousal',   label: 'arousal',   def: 0.5, hint: 'jitter · breath rate · reverb · decay' },
+];
+
+const mappingGrid = document.getElementById('mappingGrid');
+MAPPING.forEach(m => {
+  const pct = (m.def * 100).toFixed(1);
+  const div = document.createElement('div');
+  div.className = 'param';
+  div.id = 'mparam-' + m.name;
+  div.innerHTML = `
+    <div class="param-header">
+      <span class="param-name">${m.label}</span>
+      <span class="param-value" id="mval-${m.name}">${m.def.toFixed(2)}</span>
+    </div>
+    <input type="range" id="msl-${m.name}"
+      min="0" max="1" step="0.01" value="${m.def}"
+      style="--pct:${pct}%"
+      oninput="onMappingSlider('${m.name}', this)"
+    >
+    <span class="param-hint">${m.hint}</span>
+  `;
+  mappingGrid.appendChild(div);
+});
+
+function onMappingSlider(name, el) {
+  const v = parseFloat(el.value);
+  document.getElementById('mval-' + name).textContent = v.toFixed(2);
+  const pct = (v * 100).toFixed(1);
+  el.style.setProperty('--pct', pct + '%');
+  sendMapping(name, v);
+}
+
+async function sendMapping(name, value) {
+  await _send('/purr/' + name, [{ type: 'f', value }]);
+}
+
 // ── Parameter definitions ────────────────────────────────────────
 const PARAMS = [
   {
@@ -539,6 +615,10 @@ async function sendParam(name, value) {
 }
 
 async function syncAll() {
+  for (const m of MAPPING) {
+    const el = document.getElementById('msl-' + m.name);
+    if (el) await sendMapping(m.name, parseFloat(el.value));
+  }
   for (const g of PARAMS) {
     for (const p of g.params) {
       const el = document.getElementById('sl-' + p.name);

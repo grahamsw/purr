@@ -1,5 +1,5 @@
 /*******************
-Cat Purr Synthesizer — Bela Gem / PocketBeagle 2
+Cat Purr Synthesizer â Bela Gem / PocketBeagle 2
 OSC-controllable via WiFi
 
 Formant bank design:
@@ -8,14 +8,17 @@ Formant bank design:
   F1, F2 = Ringz on filtered impulses (transient ring, low body)
   F3, F4 = BPF on noise (sustained upper resonance, breath texture)
 
-Future sonification mapping layer (not in this file):
+Sonification mapping layer -- /purr/pitch, /purr/intensity, /purr/arousal:
   pitch     -> baseFreq + purrRate
   intensity -> amp + formant amps
   arousal   -> jitterDepth + breathRate + reverbMix + decays
 
 Web UI sends to 192.168.1.43:57120
-  /purr/set  paramName(s)  value(f)
-  /purr/gate 1|0(i)
+  /purr/set       paramName(s)  value(f)   -- low-level, direct
+  /purr/pitch     value(f)  0-1
+  /purr/intensity value(f)  0-1
+  /purr/arousal   value(f)  0-1
+  /purr/gate      1|0(i)
 */
 
 s = Server.default;
@@ -39,52 +42,52 @@ s.waitForBoot {
             amp  = 0.4,
             gate = 1,
 
-            // ── Pitch centre ─────────────────────────────────────
+            // ââ Pitch centre âââââââââââââââââââââââââââââââââââââ
             // All formant freqs = baseFreq * their ratio.
             // This is the primary pitch control for sonification.
-            baseFreq = 40,          // Hz — shift this to move the whole voice
+            baseFreq = 40,          // Hz â shift this to move the whole voice
 
-            // ── Purr rhythm ──────────────────────────────────────
+            // ââ Purr rhythm ââââââââââââââââââââââââââââââââââââââ
             purrRate    = 28,       // glottal pulse rate Hz
             jitterRate  = 4,        // jitter wander speed Hz
-            jitterDepth = 0.08,     // fractional jitter depth (0–0.4)
+            jitterDepth = 0.08,     // fractional jitter depth (0â0.4)
             impulseLPF  = 2.0,      // LPF on impulse as ratio of baseFreq
 
-            // ── F1 — chest fundamental (Ringz) ───────────────────
+            // ââ F1 â chest fundamental (Ringz) âââââââââââââââââââ
             f1Ratio  = 1.0,         // baseFreq * 1.0
             f1Amp    = 0.5,
             f1Decay  = 0.05,        // s
 
-            // ── F2 — throat/first overtone (Ringz) ───────────────
+            // ââ F2 â throat/first overtone (Ringz) âââââââââââââââ
             f2Ratio  = 2.1,         // slightly stretched octave
             f2Amp    = 0.35,
             f2Decay  = 0.03,
 
-            // ── F3 — upper chest (BPF on noise) ──────────────────
+            // ââ F3 â upper chest (BPF on noise) ââââââââââââââââââ
             f3Ratio  = 4.5,
-            f3Amp    = 0.2,
-            f3RQ     = 0.8,
+            f3Amp    = 0.07,
+            f3RQ     = 0.45,
 
-            // ── F4 — nasal texture (BPF on noise) ────────────────
+            // ââ F4 â nasal texture (BPF on noise) ââââââââââââââââ
             f4Ratio  = 9.0,
-            f4Amp    = 0.1,
-            f4RQ     = 0.6,
+            f4Amp    = 0.03,
+            f4RQ     = 0.35,
 
-            // ── Rumble (low pulse + LPF) ─────────────────────────
+            // ââ Rumble (low pulse + LPF) âââââââââââââââââââââââââ
             rumbleAmp       = 0.25,
             rumbleCutoff    = 1.8,  // ratio of baseFreq
             rumbleWidthRate = 2,
 
-            // ── Breath modulation ────────────────────────────────
+            // ââ Breath modulation ââââââââââââââââââââââââââââââââ
             breathRate  = 0.35,
             breathDepth = 0.3,
 
-            // ── Reverb ───────────────────────────────────────────
+            // ââ Reverb âââââââââââââââââââââââââââââââââââââââââââ
             reverbMix  = 0.4,
             reverbRoom = 0.5,
             reverbDamp = 0.8,
 
-            // ── Envelope ─────────────────────────────────────────
+            // ââ Envelope âââââââââââââââââââââââââââââââââââââââââ
             atk = 0.3,
             rel = 0.4;
 
@@ -97,7 +100,7 @@ s.waitForBoot {
         breathLo  = 1.0 - breathDepth;
         breathMod = SinOsc.kr(breathRate).range(breathLo, 1.0);
 
-        // Shared impulse source — LPF cutoff tracks baseFreq
+        // Shared impulse source â LPF cutoff tracks baseFreq
         impulses = LPF.ar(Impulse.ar(rate), baseFreq * impulseLPF);
 
         // F1 + F2: transient Ringz driven by impulses
@@ -148,7 +151,36 @@ s.waitForBoot {
         };
     }, '/purr/gate');
 
+    // -- High-level mapping state --
+    ~mapPitch     = 0.5;
+    ~mapIntensity = 0.5;
+    ~mapArousal   = 0.5;
+
+    ~applyMapping = {
+        var p = ~mapPitch, i = ~mapIntensity, a = ~mapArousal;
+        ~purr.set(
+            \baseFreq,    20   + (p * 60),
+            \purrRate,    18   + (p * 20),
+            \amp,         0.15 + (i * 0.55),
+            \f1Amp,       0.30 + (i * 0.35),
+            \f2Amp,       0.20 + (i * 0.25),
+            \rumbleAmp,   0.08 + (i * 0.30),
+            \jitterDepth, 0.02 + (a * 0.20),
+            \breathRate,  0.15 + (a * 1.20),
+            \breathDepth, 0.10 + (a * 0.35),
+            \reverbMix,   0.55 - (a * 0.40),
+            \f1Decay,     0.08 - (a * 0.05),
+            \f2Decay,     0.05 - (a * 0.03)
+        );
+        ("Mapping  pitch=" ++ p ++ "  intensity=" ++ i ++ "  arousal=" ++ a).postln;
+    };
+
+    OSCFunc({ |msg| ~mapPitch     = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/pitch');
+    OSCFunc({ |msg| ~mapIntensity = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/intensity');
+    OSCFunc({ |msg| ~mapArousal   = msg[1].asFloat.clip(0,1); ~applyMapping.value }, '/purr/arousal');
+
     "OSC listeners ready on port 57120.".postln;
 };
 
 ServerQuit.add({ 0.exit });
+
