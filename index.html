@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cat Purr — OSC Controller</title>
+<title>Purr — OSC Controller</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital@1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@700&display=swap" rel="stylesheet">
 
 <style>
   /* ── Reset & base ─────────────────────────────────────── */
@@ -65,8 +65,8 @@
   }
 
   .title-block h1 {
-    font-family: 'Playfair Display', serif;
-    font-style: italic;
+    font-family: 'Syne', sans-serif;
+    font-style: normal;
     font-size: 36px;
     font-weight: 400;
     color: var(--accent);
@@ -133,6 +133,7 @@
   button.gate-btn:hover { background: var(--surface); border-color: var(--accent); color: var(--accent); }
   button.gate-btn.on  { border-color: var(--danger); color: var(--danger); }
   button.gate-btn.on:hover { background: #2a1515; }
+  button.gate-btn.mapping-btn:hover { border-color: var(--accent3); color: var(--accent3); }
 
   /* ── Bridge config bar ───────────────────────────────── */
   .config-bar {
@@ -378,13 +379,14 @@
   <!-- ── Header ── -->
   <header>
     <div class="title-block">
-      <h1>Cat Purr</h1>
+      <h1>Purr</h1>
       <p>SuperCollider OSC Controller</p>
     </div>
     <div class="transport">
       <div class="status-dot" id="statusDot"></div>
       <span class="status-label" id="statusLabel">offline</span>
-      <button class="gate-btn" onclick="syncAll()">⇅ sync</button>
+      <button class="gate-btn mapping-btn" onclick="syncMapping()">⇅ mapping</button>
+      <button class="gate-btn" onclick="syncParams()">⇅ params</button>
       <button class="gate-btn" id="gateBtn" onclick="toggleGate()">▶ start</button>
     </div>
   </header>
@@ -453,7 +455,41 @@ function onMappingSlider(name, el) {
   document.getElementById('mval-' + name).textContent = v.toFixed(2);
   const pct = (v * 100).toFixed(1);
   el.style.setProperty('--pct', pct + '%');
-  sendMapping(name, v);
+  applyMappingToSliders();
+  syncMapping();
+}
+
+function applyMappingToSliders() {
+  const pit = parseFloat(document.getElementById('msl-pitch').value);
+  const ins = parseFloat(document.getElementById('msl-intensity').value);
+  const aro = parseFloat(document.getElementById('msl-arousal').value);
+
+  const mapped = {
+    baseFreq:    20 * Math.pow(40, pit),
+    purrRate:    15 + pit * 65,
+    amp:         0.15 + ins * 0.55,
+    f1Amp:       0.30 + ins * 0.35,
+    f2Amp:       0.20 + ins * 0.25,
+    rumbleAmp:   0.08 + ins * 0.30,
+    jitterDepth: 0.02 + aro * 0.20,
+    breathRate:  0.15 + aro * 1.20,
+    breathDepth: 0.10 + aro * 0.35,
+    reverbMix:   0.55 - aro * 0.40,
+    f1Decay:     0.08 - aro * 0.05,
+    f2Decay:     0.05 - aro * 0.03,
+  };
+
+  for (const [pname, value] of Object.entries(mapped)) {
+    const pd = findParam(pname);
+    if (!pd) continue;
+    const el = document.getElementById('sl-' + pname);
+    if (!el) continue;
+    const clamped = Math.max(pd.min, Math.min(pd.max, value));
+    el.value = clamped;
+    document.getElementById('val-' + pname).textContent = pd.fmt(clamped);
+    const pct = ((clamped - pd.min) / (pd.max - pd.min) * 100).toFixed(1);
+    el.style.setProperty('--pct', pct + '%');
+  }
 }
 
 async function sendMapping(name, value) {
@@ -579,7 +615,7 @@ PARAMS.forEach(group => {
         id="sl-${p.name}"
         min="${p.min}" max="${p.max}" step="${p.step}" value="${p.def}"
         style="--pct:${pct}%"
-        oninput="onSlider('${p.name}', this, event); sendParam('${p.name}', parseFloat(this.value))"
+        oninput="onSlider('${p.name}', this, event); syncParams()"
       >
       <span class="param-hint">${p.min} — ${p.max}</span>
     `;
@@ -615,18 +651,22 @@ async function sendParam(name, value) {
   ]), 20);
 }
 
-async function syncAll() {
+async function syncMapping() {
   for (const m of MAPPING) {
     const el = document.getElementById('msl-' + m.name);
     if (el) await sendMapping(m.name, parseFloat(el.value));
   }
+  addLog(new Date().toISOString().slice(11,23), '/purr/mapping', '-- mapping synced --', false);
+}
+
+async function syncParams() {
   for (const g of PARAMS) {
     for (const p of g.params) {
       const el = document.getElementById('sl-' + p.name);
       if (el) await sendParam(p.name, parseFloat(el.value));
     }
   }
-  addLog(new Date().toISOString().slice(11,23), '/purr/set', '— all params synced —', false);
+  addLog(new Date().toISOString().slice(11,23), '/purr/set', '-- params synced --', false);
 }
 
 async function toggleGate() {
@@ -668,7 +708,7 @@ async function ping() {
   try {
     const res  = await fetch(`http://localhost:${port}/status`);
     const data = await res.json();
-    document.getElementById('scHostLabel').textContent =
+    document.getElementById('scPortLabel').textContent =
       data.scHost + ':' + data.scPort;
     setStatus(data.scAlive ? 'online' : 'bridge-only');
   } catch {
