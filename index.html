@@ -385,6 +385,12 @@
     <div class="transport">
       <div class="status-dot" id="statusDot"></div>
       <span class="status-label" id="statusLabel">offline</span>
+      
+      <select id="synthType" class="gate-btn" style="text-transform: none; padding: 7px 10px;">
+        <option value="0">Classic (Impulse)</option>
+        <option value="1">Buzz (Blip)</option>
+      </select>
+
       <button class="gate-btn mapping-btn" onclick="syncMapping()">⇅ mapping</button>
       <button class="gate-btn" onclick="syncParams()">⇅ params</button>
       <button class="gate-btn" id="gateBtn" onclick="toggleGate()">▶ start</button>
@@ -504,6 +510,7 @@ const PARAMS = [
     params: [
       { name: 'amp',      label: 'amp',      min: 0,   max: 1,   step: 0.01, def: 0.4,  fmt: v => v.toFixed(2) },
       { name: 'baseFreq', label: 'baseFreq', min: 20,  max: 200, step: 1,    def: 40,   fmt: v => v.toFixed(0) + ' Hz' },
+      { name: 'numHarmonics', label: 'buzz (Blip harmonics)', min: 1, max: 40, step: 1, def: 10, fmt: v => v.toFixed(0) },
     ]
   },
   {
@@ -672,9 +679,13 @@ async function syncParams() {
 async function toggleGate() {
   purrRunning = !purrRunning;
   const btn = document.getElementById('gateBtn');
+  const type = parseInt(document.getElementById('synthType').value);
   btn.textContent = purrRunning ? '■ stop' : '▶ start';
   btn.className = 'gate-btn' + (purrRunning ? ' on' : '');
-  await _send('/purr/gate', [{ type: 'i', value: purrRunning ? 1 : 0 }]);
+  await _send('/purr/gate', [
+    { type: 'i', value: purrRunning ? 1 : 0 },
+    { type: 'i', value: type }
+  ]);
 }
 
 async function _send(address, args) {
@@ -728,7 +739,24 @@ function addLog(ts, addr, val, isErr) {
 
 function clearLog() { document.getElementById('log').innerHTML = ''; }
 
+function updateBuzzVisibility() {
+  const type = document.getElementById('synthType').value;
+  const el = document.getElementById('param-numHarmonics');
+  if (el) el.style.display = (type === '1') ? 'flex' : 'none';
+}
+
+document.getElementById('synthType').addEventListener('change', async () => {
+  updateBuzzVisibility();
+  if (purrRunning) {
+    // Restart with new type
+    purrRunning = false;
+    await _send('/purr/gate', [{ type: 'i', value: 0 }]);
+    await toggleGate();
+  }
+});
+
 // ── Init ─────────────────────────────────────────────────────────
+updateBuzzVisibility();
 ping();
 setInterval(ping, 5000);
 </script>
