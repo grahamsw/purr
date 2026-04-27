@@ -4,7 +4,7 @@ import PurrController from './components/PurrController.vue'
 import MalletController from './components/MalletController.vue'
 import LiquidSynthController from './components/LiquidSynthController.vue'
 
-const currentView = ref('purr')
+const currentView = ref('liquid')
 </script>
 
 <template>

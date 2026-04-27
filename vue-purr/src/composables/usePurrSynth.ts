@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, onUnmounted } from 'vue';
 
 export interface PurrParams {
   engine: 'classic' | 'buzz' | 'karplus';
@@ -244,6 +244,10 @@ export function usePurrSynth() {
     params.f1Decay = 0.08 - arousal * 0.05;
     params.f2Decay = 0.05 - arousal * 0.03;
   }
+
+  onUnmounted(() => {
+    stop();
+  });
 
   return { params, isStarted, start, stop, applyMapping };
 }

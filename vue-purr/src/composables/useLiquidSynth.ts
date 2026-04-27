@@ -119,7 +119,6 @@ export function useLiquidSynth() {
       if (context.state === 'suspended') {
         await context.resume();
       }
-      playTestTone();
     }
 
     isStarted.value = true;
@@ -132,6 +131,7 @@ export function useLiquidSynth() {
   }
 
   onUnmounted(() => {
+    stop();
     if (workletNode) workletNode.disconnect();
     if (mainGain) mainGain.disconnect();
     if (context) context.close();
