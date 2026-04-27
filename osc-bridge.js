@@ -19,7 +19,7 @@ const BRIDGE_LISTEN_PORT = 57200;  // bridge listens here for pong from SC
 const hostArg = process.argv.find(a => a.startsWith('--sc-host='));
 const SC_HOST = hostArg
     ? hostArg.split('=')[1]
-    : (process.env.SC_HOST || '127.0.0.1');
+    : (process.env.SC_HOST || '192.168.1.43');
 
 const udpPort = new osc.UDPPort({
     localAddress:  '0.0.0.0',
@@ -32,7 +32,7 @@ const udpPort = new osc.UDPPort({
 let scLastPong = 0;
 
 udpPort.on('message', (msg) => {
-    if (msg.address === '/purr/pong') scLastPong = Date.now();
+    if (msg.address === '/liquid/pong') scLastPong = Date.now();
 });
 
 udpPort.open();
@@ -43,7 +43,7 @@ udpPort.on('ready', () => {
 udpPort.on('error', (err) => console.error('OSC error:', err.message));
 
 function sendPing() {
-    try { udpPort.send({ address: '/purr/ping', args: [] }); } catch (e) {}
+    try { udpPort.send({ address: '/liquid/ping', args: [] }); } catch (e) {}
 }
 setInterval(sendPing, 5000);
 
