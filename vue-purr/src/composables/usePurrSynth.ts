@@ -2,7 +2,7 @@ import * as Tone from 'tone';
 import { ref, reactive, watch } from 'vue';
 
 export interface PurrParams {
-  engine: 'classic' | 'buzz';
+  engine: 'classic' | 'buzz' | 'karplus';
   amp: number;
   baseFreq: number;
   purrRate: number;
@@ -68,6 +68,14 @@ export function usePurrSynth() {
   let exciterLPF: Tone.Filter;
   let jitterLFO: Tone.LFO;
 
+  // Karplus-Strong nodes
+  let noise: Tone.Noise;
+  let noiseGate: Tone.Gain;
+  let ksDelay: Tone.Delay;
+  let ksFeedback: Tone.Gain;
+  let ksLPF: Tone.Filter;
+  let ksOut: Tone.Gain;
+
   let f1Res: Tone.Filter;
   let f2Res: Tone.Filter;
   let f1Gain: Tone.Gain;
@@ -91,21 +99,50 @@ export function usePurrSynth() {
     breathGain.connect(dryWet.a);
     breathGain.connect(reverb);
 
+    // Exciter (Pulse for classic/buzz, noise trigger for karplus)
     exciter = new Tone.PulseOscillator(params.purrRate, 0.01).start();
     exciterLPF = new Tone.Filter(params.baseFreq * params.impulseLPF, "lowpass");
     exciter.connect(exciterLPF);
 
+    // Karplus-Strong Chain
+    noise = new Tone.Noise("white").start();
+    noiseGate = new Tone.Gain(0);
+    noise.connect(noiseGate);
+    
+    // Use exciter to gate noise for KS burst
+    // We'll use a separate gain controlled by the pulse
+    const pulseToGate = new Tone.Gain(0);
+    exciter.connect(pulseToGate); // Pulse is -1 to 1, we want 0 to 1
+    // A simple trick to get 0-1 from pulse:
+    const gateScale = new Tone.ScaleExp(0, 1); 
+    exciter.connect(gateScale);
+    gateScale.connect(noiseGate.gain);
+
+    ksDelay = new Tone.Delay(1/20, 1);
+    ksFeedback = new Tone.Gain(0.98);
+    ksLPF = new Tone.Filter(params.baseFreq * 4, "lowpass");
+    ksOut = new Tone.Gain(0);
+
+    noiseGate.connect(ksDelay);
+    ksDelay.connect(ksLPF);
+    ksLPF.connect(ksFeedback);
+    ksFeedback.connect(ksDelay);
+    ksDelay.connect(ksOut);
+
     jitterLFO = new Tone.LFO(params.jitterRate, 0, 1).start();
     jitterLFO.connect(exciter.frequency);
+    jitterLFO.connect(ksDelay.delayTime); // Optional: jitter the KS pitch too
 
     f1Res = new Tone.Filter(params.baseFreq * params.f1Ratio, "bandpass");
     f1Gain = new Tone.Gain(params.f1Amp).connect(breathGain);
     exciterLPF.connect(f1Res);
+    ksOut.connect(f1Res); // Both sources feed into formants
     f1Res.connect(f1Gain);
 
     f2Res = new Tone.Filter(params.baseFreq * params.f2Ratio, "bandpass");
     f2Gain = new Tone.Gain(params.f2Amp).connect(breathGain);
     exciterLPF.connect(f2Res);
+    ksOut.connect(f2Res);
     f2Res.connect(f2Gain);
 
     rumbleOsc = new Tone.PulseOscillator(params.purrRate, 0.5).start();
@@ -127,9 +164,18 @@ export function usePurrSynth() {
   function updateAll() {
     if (!mainGain) return; // Wait for init
 
-    // Engine
-    const targetWidth = params.engine === 'classic' ? 0.01 : (1 / Math.max(1, params.numHarmonics));
-    exciter.width.rampTo(targetWidth, RAMP_TIME);
+    // Engine Selection
+    if (params.engine === 'karplus') {
+      exciterLPF.gain.rampTo(0, RAMP_TIME);
+      ksOut.gain.rampTo(1.5, RAMP_TIME); // KS needs a bit more gain
+      ksDelay.delayTime.rampTo(1 / params.baseFreq, RAMP_TIME);
+      ksLPF.frequency.rampTo(params.baseFreq * 8, RAMP_TIME);
+    } else {
+      ksOut.gain.rampTo(0, RAMP_TIME);
+      exciterLPF.gain.rampTo(1, RAMP_TIME);
+      const targetWidth = params.engine === 'classic' ? 0.01 : (1 / Math.max(1, params.numHarmonics));
+      exciter.width.rampTo(targetWidth, RAMP_TIME);
+    }
 
     // Timing
     jitterLFO.frequency.rampTo(params.jitterRate, RAMP_TIME);

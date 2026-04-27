@@ -44,6 +44,7 @@ const getPct = (val: number, min: number, max: number) => {
         <select v-model="params.engine" class="gate-btn select-box">
           <option value="classic">Classic (Impulse)</option>
           <option value="buzz">Buzz (Blip)</option>
+          <option value="karplus">Karplus-Strong</option>
         </select>
 
         <button class="gate-btn" @click="showLowLevel = !showLowLevel">
