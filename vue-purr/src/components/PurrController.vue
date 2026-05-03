@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { usePurrSynth } from '../composables/usePurrSynth'
+import { ref } from 'vue'
 
-const { params, isStarted, start, stop, applyMapping } = usePurrSynth()
+const { params, isStarted, start, stop, applyMapping, parameters } = usePurrSynth()
 
 const pitch = ref(0.5)
 const intensity = ref(0.5)
@@ -24,10 +24,6 @@ function toggleGate() {
     start()
   }
 }
-
-const getPct = (val: number, min: number, max: number) => {
-  return ((val - min) / (max - min)) * 100
-}
 </script>
 
 <template>
@@ -35,18 +31,12 @@ const getPct = (val: number, min: number, max: number) => {
     <header>
       <div class="title-block">
         <h1>Purr</h1>
-        <p>Tone.js Web Synthesizer</p>
+        <p>Zero-Dependency Web Audio Synth</p>
       </div>
       <div class="transport">
         <div :class="['status-dot', isStarted ? 'alive' : '']"></div>
         <span class="status-label">{{ isStarted ? 'online' : 'offline' }}</span>
         
-        <select v-model="params.engine" class="gate-btn select-box">
-          <option value="classic">Classic (Impulse)</option>
-          <option value="buzz">Buzz (Blip)</option>
-          <option value="karplus">Karplus-Strong (unstable)</option>
-        </select>
-
         <button class="gate-btn" @click="showLowLevel = !showLowLevel">
           {{ showLowLevel ? 'hide' : 'show' }} params
         </button>
@@ -92,75 +82,28 @@ const getPct = (val: number, min: number, max: number) => {
     <!-- Low Level Params -->
     <div v-if="showLowLevel" class="params-container">
       <div class="section">
-        <div class="section-label"><span>◎</span>Master & Rhythm</div>
+        <div class="section-label"><span>◎</span>All Parameters</div>
         <div class="grid">
-          <div class="param">
+          <div v-for="p in parameters" :key="p.id" class="param">
             <div class="param-header">
-              <span class="param-name">amp</span>
-              <span class="param-value">{{ params.amp.toFixed(2) }}</span>
+              <span class="param-name">{{ p.name }}</span>
+              <span class="param-value" v-if="p.type === 'number'">{{ params[p.id] }}</span>
             </div>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="params.amp" 
-                   :style="{ '--pct': params.amp * 100 + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header">
-              <span class="param-name">baseFreq</span>
-              <span class="param-value">{{ params.baseFreq.toFixed(0) }} Hz</span>
-            </div>
-            <input type="range" min="20" max="200" step="1" v-model.number="params.baseFreq" 
-                   :style="{ '--pct': getPct(params.baseFreq, 20, 200) + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header">
-              <span class="param-name">purrRate</span>
-              <span class="param-value">{{ params.purrRate.toFixed(1) }} Hz</span>
-            </div>
-            <input type="range" min="15" max="80" step="0.5" v-model.number="params.purrRate" 
-                   :style="{ '--pct': getPct(params.purrRate, 15, 80) + '%' }">
-          </div>
-          <div class="param" v-if="params.engine === 'buzz'">
-            <div class="param-header">
-              <span class="param-name">numHarmonics</span>
-              <span class="param-value">{{ params.numHarmonics }}</span>
-            </div>
-            <input type="range" min="1" max="50" step="1" v-model.number="params.numHarmonics" 
-                   :style="{ '--pct': getPct(params.numHarmonics, 1, 50) + '%' }">
-          </div>
-        </div>
-      </div>
+            
+            <template v-if="p.type === 'number'">
+              <input type="range" :min="p.min" :max="p.max" :step="p.step" v-model.number="params[p.id]" 
+                     :style="{ '--pct': ((params[p.id] - p.min) / (p.max - p.min)) * 100 + '%' }">
+            </template>
+            
+            <template v-else-if="p.type === 'choice'">
+              <select v-model="params[p.id]" class="select-box">
+                <option v-for="opt in p.options" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+            </template>
 
-      <div class="section">
-        <div class="section-label"><span>◇</span>Resonators (F1, F2)</div>
-        <div class="grid">
-          <div class="param">
-            <div class="param-header"><span class="param-name">f1Amp</span><span class="param-value">{{ params.f1Amp.toFixed(2) }}</span></div>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="params.f1Amp" :style="{ '--pct': params.f1Amp * 100 + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header"><span class="param-name">f1Decay</span><span class="param-value">{{ (params.f1Decay*1000).toFixed(0) }}ms</span></div>
-            <input type="range" min="0.01" max="0.2" step="0.001" v-model.number="params.f1Decay" :style="{ '--pct': getPct(params.f1Decay, 0.01, 0.2) + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header"><span class="param-name">f2Amp</span><span class="param-value">{{ params.f2Amp.toFixed(2) }}</span></div>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="params.f2Amp" :style="{ '--pct': params.f2Amp * 100 + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header"><span class="param-name">f2Decay</span><span class="param-value">{{ (params.f2Decay*1000).toFixed(0) }}ms</span></div>
-            <input type="range" min="0.01" max="0.2" step="0.001" v-model.number="params.f2Decay" :style="{ '--pct': getPct(params.f2Decay, 0.01, 0.2) + '%' }">
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-label"><span>〜</span>Breath & Spatial</div>
-        <div class="grid">
-          <div class="param">
-            <div class="param-header"><span class="param-name">breathRate</span><span class="param-value">{{ params.breathRate.toFixed(2) }} Hz</span></div>
-            <input type="range" min="0.1" max="2.0" step="0.05" v-model.number="params.breathRate" :style="{ '--pct': getPct(params.breathRate, 0.1, 2.0) + '%' }">
-          </div>
-          <div class="param">
-            <div class="param-header"><span class="param-name">reverbMix</span><span class="param-value">{{ params.reverbMix.toFixed(2) }}</span></div>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="params.reverbMix" :style="{ '--pct': params.reverbMix * 100 + '%' }">
+            <template v-else-if="p.type === 'boolean'">
+              <input type="checkbox" v-model="params[p.id]">
+            </template>
           </div>
         </div>
       </div>
@@ -246,8 +189,14 @@ header {
 .gate-btn.on { border-color: var(--danger); color: var(--danger); }
 
 .select-box {
-  text-transform: none;
-  padding-right: 30px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  padding: 6px;
+  border-radius: var(--radius);
+  width: 100%;
 }
 
 .mapping-section {

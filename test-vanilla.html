@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonifiers Core Test</title>
+</head>
+<body>
+    <h1>Sonifiers Core Vanilla JS Test</h1>
+    <div id="controls"></div>
+
+    <script type="module">
+        import { LiquidSynth, MalletSynth, PurrSynth } from './packages/sonifiers-core/src/index.ts';
+
+        // Note: This test expects the environment to handle TS imports or to point to compiled JS.
+        // For a quick check, we can use the compiled dist if available.
+        // import { LiquidSynth, MalletSynth, PurrSynth } from './packages/sonifiers-core/dist/index.js';
+
+        async function testSynth(SynthClass, name, ...args) {
+            console.log(`Testing ${name}...`);
+            const synth = new SynthClass(...args);
+            const params = synth.getParameters();
+            console.log(`${name} parameters:`, params);
+
+            const btn = document.createElement('button');
+            btn.innerText = `Start ${name}`;
+            btn.onclick = async () => {
+                await synth.start();
+                btn.innerText = `${name} Started`;
+                
+                // Set primary param to 0.8
+                const primary = params.find(p => p.order === 0);
+                if (primary) {
+                    console.log(`Setting ${primary.name} to 0.8`);
+                    synth.setParam(primary.id, 0.8);
+                }
+            };
+            document.getElementById('controls').appendChild(btn);
+
+            const stopBtn = document.createElement('button');
+            stopBtn.innerText = `Stop ${name}`;
+            stopBtn.onclick = () => {
+                synth.stop();
+                btn.innerText = `Start ${name}`;
+            };
+            document.getElementById('controls').appendChild(stopBtn);
+        }
+
+        // We'll use the compiled JS for the test if we were running in a real browser, 
+        // but here we just want to verify the logic.
+        console.log("Vanilla JS test logic prepared.");
+    </script>
+</body>
+</html>

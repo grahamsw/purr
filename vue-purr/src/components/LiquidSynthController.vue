@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useLiquidSynth } from '../composables/useLiquidSynth'
 
-const { params, isStarted, isReady, error, start, stop } = useLiquidSynth()
+const { params, isStarted, isReady, error, start, stop, parameters } = useLiquidSynth()
 
 function toggleSynth() {
   if (isStarted.value) {
@@ -9,10 +9,6 @@ function toggleSynth() {
   } else {
     start()
   }
-}
-
-const getPct = (val: number, min: number, max: number) => {
-  return ((val - min) / (max - min)) * 100
 }
 </script>
 
@@ -41,40 +37,26 @@ const getPct = (val: number, min: number, max: number) => {
     <div class="mapping-section">
       <div class="section-label"><span>◈</span>Physical Parameters</div>
       <div class="grid">
-        <div class="param">
+        <div v-for="p in parameters" :key="p.id" class="param">
           <div class="param-header">
-            <span class="param-name">Resonator Freq</span>
-            <span class="param-value">{{ params.frequency.toFixed(1) }} Hz</span>
+            <span class="param-name">{{ p.name }}</span>
+            <span class="param-value" v-if="p.type === 'number'">{{ params[p.id] }}</span>
           </div>
-          <input type="range" min="10" max="100" step="0.1" v-model.number="params.frequency" 
-                 :style="{ '--pct': getPct(params.frequency, 10, 100) + '%' }">
-        </div>
 
-        <div class="param">
-          <div class="param-header">
-            <span class="param-name">Viscosity</span>
-            <span class="param-value">{{ params.viscosity.toFixed(2) }}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" v-model.number="params.viscosity" 
-                 :style="{ '--pct': params.viscosity * 100 + '%' }">
-        </div>
+          <template v-if="p.type === 'number'">
+            <input type="range" :min="p.min" :max="p.max" :step="p.step" v-model.number="params[p.id]" 
+                   :style="{ '--pct': ((params[p.id] - (p.min || 0)) / ((p.max || 1) - (p.min || 0))) * 100 + '%' }">
+          </template>
 
-        <div class="param">
-          <div class="param-header">
-            <span class="param-name">Volume / Size</span>
-            <span class="param-value">{{ params.volume.toFixed(2) }}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" v-model.number="params.volume" 
-                 :style="{ '--pct': params.volume * 100 + '%' }">
-        </div>
+          <template v-else-if="p.type === 'choice'">
+            <select v-model="params[p.id]" class="select-box">
+              <option v-for="opt in p.options" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </template>
 
-        <div class="param">
-          <div class="param-header">
-            <span class="param-name">Amplitude</span>
-            <span class="param-value">{{ params.amp.toFixed(2) }}</span>
-          </div>
-          <input type="range" min="0" max="1" step="0.01" v-model.number="params.amp" 
-                 :style="{ '--pct': params.amp * 100 + '%' }">
+          <template v-else-if="p.type === 'boolean'">
+            <input type="checkbox" v-model="params[p.id]">
+          </template>
         </div>
       </div>
     </div>
@@ -175,6 +157,17 @@ header {
 }
 .gate-btn:hover { border-color: var(--accent); color: var(--accent); }
 .gate-btn.on { border-color: var(--danger); color: var(--danger); }
+
+.select-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  padding: 6px;
+  border-radius: var(--radius);
+  width: 100%;
+}
 
 .mapping-section {
   background: var(--surface);

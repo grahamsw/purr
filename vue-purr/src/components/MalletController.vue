@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMalletSynth } from '../composables/useMalletSynth'
 
-const { params, isStarted, isFlashing, start, stop } = useMalletSynth()
+const { params, isStarted, isFlashing, start, stop, parameters } = useMalletSynth()
 
 function toggleGate() {
   if (isStarted.value) {
@@ -9,10 +9,6 @@ function toggleGate() {
   } else {
     start()
   }
-}
-
-const getPct = (val: number, min: number, max: number) => {
-  return ((val - min) / (max - min)) * 100
 }
 </script>
 
@@ -37,66 +33,34 @@ const getPct = (val: number, min: number, max: number) => {
       <div 
         class="box-rect" 
         :style="{ 
-          transform: `scale(${0.5 + (params.boxSize / 100)})`,
-          borderWidth: `${1 + (params.force / 100) * 10}px`,
-          boxShadow: `0 0 ${params.resonance}px var(--neon)`
+          transform: `scale(${0.5 + (params.boxSize || 0.5)})`,
+          borderWidth: `${1 + (params.force || 0.7) * 10}px`,
+          boxShadow: `0 0 ${(params.resonance || 0.4) * 100}px var(--neon)`
         }"
       ></div>
     </div>
 
     <div class="controls-grid">
-      <div class="param">
+      <div v-for="p in parameters" :key="p.id" class="param">
         <div class="param-header">
-          <span class="param-name">box size</span>
-          <span class="param-value">{{ params.boxSize }}%</span>
+          <span class="param-name">{{ p.name }}</span>
+          <span class="param-value" v-if="p.type === 'number'">{{ params[p.id] }}</span>
         </div>
-        <input type="range" min="1" max="100" step="1" v-model.number="params.boxSize" 
-               :style="{ '--pct': getPct(params.boxSize, 1, 100) + '%' }">
-      </div>
 
-      <div class="param">
-        <div class="param-header">
-          <span class="param-name">resonance</span>
-          <span class="param-value">{{ params.resonance }}%</span>
-        </div>
-        <input type="range" min="1" max="100" step="1" v-model.number="params.resonance" 
-               :style="{ '--pct': getPct(params.resonance, 1, 100) + '%' }">
-      </div>
+        <template v-if="p.type === 'number'">
+          <input type="range" :min="p.min" :max="p.max" :step="p.step" v-model.number="params[p.id]" 
+                 :style="{ '--pct': ((params[p.id] - (p.min || 0)) / ((p.max || 1) - (p.min || 0))) * 100 + '%' }">
+        </template>
 
-      <div class="param">
-        <div class="param-header">
-          <span class="param-name">strike rate</span>
-          <span class="param-value">{{ params.strikeRate }} Hz</span>
-        </div>
-        <input type="range" min="0.1" max="50" step="0.1" v-model.number="params.strikeRate" 
-               :style="{ '--pct': getPct(params.strikeRate, 0.1, 50) + '%' }">
-      </div>
+        <template v-else-if="p.type === 'choice'">
+          <select v-model="params[p.id]" class="select-box">
+            <option v-for="opt in p.options" :key="opt" :value="opt">{{ opt }}</option>
+          </select>
+        </template>
 
-      <div class="param">
-        <div class="param-header">
-          <span class="param-name">force</span>
-          <span class="param-value">{{ params.force }}%</span>
-        </div>
-        <input type="range" min="1" max="100" step="1" v-model.number="params.force" 
-               :style="{ '--pct': getPct(params.force, 1, 100) + '%' }">
-      </div>
-
-      <div class="param">
-        <div class="param-header">
-          <span class="param-name">hardness</span>
-          <span class="param-value">{{ params.hardness }}%</span>
-        </div>
-        <input type="range" min="1" max="100" step="1" v-model.number="params.hardness" 
-               :style="{ '--pct': getPct(params.hardness, 1, 100) + '%' }">
-      </div>
-
-      <div class="param">
-        <div class="param-header">
-          <span class="param-name">volume</span>
-          <span class="param-value">{{ params.volume }}%</span>
-        </div>
-        <input type="range" min="0" max="100" step="1" v-model.number="params.volume" 
-               :style="{ '--pct': getPct(params.volume, 0, 100) + '%' }">
+        <template v-else-if="p.type === 'boolean'">
+          <input type="checkbox" v-model="params[p.id]">
+        </template>
       </div>
     </div>
 
@@ -187,6 +151,17 @@ header {
 }
 .gate-btn:hover { border-color: var(--neon); }
 .gate-btn.on { border-color: #ff4444; color: #ff4444; }
+
+.select-box {
+  background: #05160d;
+  border: 1px solid #00ff8844;
+  color: var(--neon);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  padding: 6px;
+  border-radius: 4px;
+  width: 100%;
+}
 
 .visualizer-container {
   height: 200px;

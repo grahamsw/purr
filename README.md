@@ -2,7 +2,9 @@
 
 A cat purr synthesizer running headlessly on a [Bela Gem](https://bela.io/products/bela-mini/) (PocketBeagle 2) or any SuperCollider instance, controllable over WiFi via a browser UI.
 
-Designed as a data sonifier: three normalized input dimensions — pitch, intensity, arousal — map onto the synthesis engine in a perceptually coherent way. The SynthDef is intentionally parameter-rich so the mapping can be adjusted without touching the audio code.
+> [!IMPORTANT]  
+> **The Web Sonification library and sample application have been moved to their own standalone repository: [grahamsw/sonifier-web](https://github.com/grahamsw/sonifier-web)**.  
+> This repository (`purr`) remains the home for the Bela/SuperCollider research and experimental synthesis work.
 
 ---
 

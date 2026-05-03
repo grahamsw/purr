@@ -24,12 +24,12 @@ The system SHALL model the acoustic response of a large container filled with li
 - **THEN** the fundamental resonance frequencies shift downward to simulate a larger mass of liquid
 
 ### Requirement: Real-time Audio Control Interface
-The system SHALL provide a user interface to control the synthesizer parameters in real-time using either WebAudio or OSC (Open Sound Control).
+The system SHALL provide a standardized API to control the synthesizer parameters in real-time, supporting both Web Audio and OSC backends.
 
-#### Scenario: Start/Stop Audio
-- **WHEN** the user toggles the synth power state
-- **THEN** the audio context (WebAudio) or the remote server (OSC) is started or stopped accordingly
+#### Scenario: Start/Stop Audio via Standardized API
+- **WHEN** the user calls the `start()` or `stop()` method on a synth instance
+- **THEN** the underlying audio engine (Web Audio or OSC) is started or stopped accordingly
 
-#### Scenario: Remote Parameter Control
-- **WHEN** the user adjusts a parameter in the HTML control interface
-- **THEN** the system SHALL dispatch either a WebAudio parameter ramp or an OSC message to the synthesis engine
+#### Scenario: Parameter Control via Standardized API
+- **WHEN** the user updates parameters via the synth's `setParams()` method
+- **THEN** the system SHALL dispatch either a Web Audio parameter ramp or an OSC message to the synthesis engine
